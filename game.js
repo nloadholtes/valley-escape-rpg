@@ -67,8 +67,9 @@ let awaitingEquipConfirmation = false;
 let combatVisible = false;
 
 function draw() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    canvas.style.display = combatVisible ? 'none' : 'block'; // Hide canvas during combat
     if (!combatVisible) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
         const currentMap = maps[gameState.currentMap];
 
         for (let y = 0; y < mapHeight; y++) {
@@ -109,6 +110,8 @@ function draw() {
         ctx.fillRect(player.x * tileSize, player.y * tileSize, tileSize, tileSize);
         ctx.fillStyle = '#0f0';
         ctx.fillText('🟥', player.x * tileSize + tileSize / 2, player.y * tileSize + tileSize / 2);
+    } else {
+        ctx.clearRect(0, 0, canvas.width, canvas.height); // Ensure canvas is cleared
     }
 }
 
@@ -218,12 +221,12 @@ function handleCombatInput(event) {
         case '5': // Flee
             actionResult = gameState.combat.performAction('flee');
             break;
-        case 'y':
+        case 'y': // Confirm attack after inventory
             if (gameState.combat.actionQueue.includes('inventory')) {
                 actionResult = gameState.combat.performAction('attackAfterInventory', gameState.combat.enemies[0]);
             }
             break;
-        case 'n':
+        case 'n': // Cancel inventory action
             if (gameState.combat.actionQueue.includes('inventory')) {
                 gameState.combat.actionQueue = [];
                 actionResult = { result: 'Inventory action canceled.', state: gameState.combat.getCombatState() };
@@ -433,12 +436,14 @@ function toggleCombatUI(show) {
     const inv = document.getElementById('inventory');
     const options = document.getElementById('combat-options');
     if (show) {
+        canvas.style.display = 'none'; // Hide canvas during combat
         log.style.display = 'block';
         inv.style.display = 'block';
         options.style.display = 'block';
         options.textContent = '1:ATTACK  2:INVENTORY  4:EVADE  5:FLEE';
     } else {
-        log.style.display = 'block'; // Show log for non-combat messages
+        canvas.style.display = 'block'; // Show canvas after combat
+        log.style.display = 'block'; // Keep log visible for non-combat
         inv.style.display = 'none';
         options.style.display = 'none';
         options.textContent = '';
@@ -458,3 +463,4 @@ function updateCombatUI() {
 
 draw();
 updateLog(); // Initialize log on startup
+
