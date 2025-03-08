@@ -58,64 +58,73 @@ let gameState = {
     enemies: [
         { x: 5, y: 5, map: 'prison', name: 'Escaped Prisoner', health: 50, attack: 5 }
     ],
-    combat: null // Will hold the Combat instance
+    combat: null
 };
 
 let inventoryVisible = false;
 let selectedItemIndex = 0;
 let awaitingEquipConfirmation = false;
+let combatVisible = false;
 
 function draw() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    const currentMap = maps[gameState.currentMap];
+    if (!combatVisible) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        const currentMap = maps[gameState.currentMap];
 
-    for (let y = 0; y < mapHeight; y++) {
-        for (let x = 0; x < mapWidth; x++) {
-            ctx.fillStyle = '#000';
-            ctx.fillRect(x * tileSize, y * tileSize, tileSize, tileSize);
-            const emoji = currentMap[y][x] === 1 ? '⬛' :
-                         currentMap[y][x] === 0 ? '🟫' :
-                         currentMap[y][x] === 2 ? '🟩' : '';
-            ctx.font = '24px monospace';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillStyle = '#0f0';
-            ctx.fillText(emoji, x * tileSize + tileSize / 2, y * tileSize + tileSize / 2);
+        for (let y = 0; y < mapHeight; y++) {
+            for (let x = 0; x < mapWidth; x++) {
+                ctx.fillStyle = '#000';
+                ctx.fillRect(x * tileSize, y * tileSize, tileSize, tileSize);
+                const emoji = currentMap[y][x] === 1 ? '⬛' :
+                             currentMap[y][x] === 0 ? '🟫' :
+                             currentMap[y][x] === 2 ? '🟩' : '';
+                ctx.font = '24px monospace';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillStyle = '#0f0';
+                ctx.fillText(emoji, x * tileSize + tileSize / 2, y * tileSize + tileSize / 2);
+            }
         }
+
+        gameState.items.forEach(item => {
+            if (item.map === gameState.currentMap) {
+                ctx.fillStyle = '#000';
+                ctx.fillRect(item.x * tileSize, item.y * tileSize, tileSize, tileSize);
+                ctx.fillStyle = '#0f0';
+                const display = item.image ? item.image : item.default;
+                ctx.fillText(display, item.x * tileSize + tileSize / 2, item.y * tileSize + tileSize / 2);
+            }
+        });
+
+        gameState.enemies.forEach(enemy => {
+            if (enemy.map === gameState.currentMap) {
+                ctx.fillStyle = '#000';
+                ctx.fillRect(enemy.x * tileSize, enemy.y * tileSize, tileSize, tileSize);
+                ctx.fillStyle = '#0f0';
+                ctx.fillText('🟪', enemy.x * tileSize + tileSize / 2, enemy.y * tileSize + tileSize / 2);
+            }
+        });
+
+        ctx.fillStyle = '#000';
+        ctx.fillRect(player.x * tileSize, player.y * tileSize, tileSize, tileSize);
+        ctx.fillStyle = '#0f0';
+        ctx.fillText('🟥', player.x * tileSize + tileSize / 2, player.y * tileSize + tileSize / 2);
+    } else {
+        ctx.clearRect(0, 0, canvas.width, canvas.height); // Clear map during combat
     }
-
-    gameState.items.forEach(item => {
-        if (item.map === gameState.currentMap) {
-            ctx.fillStyle = '#000';
-            ctx.fillRect(item.x * tileSize, item.y * tileSize, tileSize, tileSize);
-            ctx.fillStyle = '#0f0';
-            const display = item.image ? item.image : item.default;
-            ctx.fillText(display, item.x * tileSize + tileSize / 2, item.y * tileSize + tileSize / 2);
-        }
-    });
-
-    gameState.enemies.forEach(enemy => {
-        if (enemy.map === gameState.currentMap) {
-            ctx.fillStyle = '#000';
-            ctx.fillRect(enemy.x * tileSize, enemy.y * tileSize, tileSize, tileSize);
-            ctx.fillStyle = '#0f0';
-            ctx.fillText('🟪', enemy.x * tileSize + tileSize / 2, enemy.y * tileSize + tileSize / 2);
-        }
-    });
-
-    ctx.fillStyle = '#000';
-    ctx.fillRect(player.x * tileSize, player.y * tileSize, tileSize, tileSize);
-    ctx.fillStyle = '#0f0';
-    ctx.fillText('🟥', player.x * tileSize + tileSize / 2, player.y * tileSize + tileSize / 2);
 }
 
 document.addEventListener('keydown', (event) => {
     if (gameState.combat && gameState.combat.isActive) {
-        handleCombatInput(event);
+        if (event.key === 'r' && gameState.player.health <= 0) restartGame();
+        else if (event.key === 'l' && gameState.player.health <= 0) loadGame();
+        else handleCombatInput(event);
     } else if (inventoryVisible) {
         handleInventoryInput(event);
     } else {
         handleMapInput(event);
+        if (event.key === 'r') restartGame();
+        else if (event.key === 'l') loadGame();
     }
 });
 
@@ -125,14 +134,14 @@ function handleMapInput(event) {
     const currentMap = maps[gameState.currentMap];
 
     switch (event.key) {
-        case 'ArrowUp': newY--; break;
-        case 'ArrowDown': newY++; break;
-        case 'ArrowLeft': newX--; break;
-        case 'ArrowRight': newX++; break;
+        case 'ArrowUp': newY -= 1; break;
+        case 'ArrowDown': newY += 1; break;
+        case 'ArrowLeft': newX -= 1; break;
+        case 'ArrowRight': newX += 1; break;
         case 'i': toggleInventory(); return;
     }
 
-    const tile = currentMap[newY][newX];
+    const tile = currentMap[newY] && currentMap[newY][newX];
     if (tile === 0) {
         player.x = newX;
         player.y = newY;
@@ -203,9 +212,6 @@ function handleCombatInput(event) {
             actionResult = gameState.combat.performAction('inventory');
             toggleInventory(); // Show inventory for weapon selection
             return; // Exit to let inventory handle the rest
-        case '3': // Move
-            actionResult = gameState.combat.performAction('move');
-            break;
         case '4': // Evade
             actionResult = gameState.combat.performAction('evade');
             break;
@@ -225,7 +231,9 @@ function handleCombatInput(event) {
             break;
         case 'Escape':
             gameState.combat.endCombat();
+            combatVisible = false;
             updateLog('Combat manually ended for testing.');
+            draw();
             return;
     }
 
@@ -239,8 +247,10 @@ function handleCombatInput(event) {
             } else if (actionResult.defeat) {
                 updateLog('Game Over! Press r to restart or l to load a saved game.');
             }
+            combatVisible = false;
+            draw();
         } else if (actionResult.state) {
-            gameState.combat = new Combat([player], gameState.enemies); // Refresh combat state
+            gameState.combat = new Combat([player], gameState.enemies);
             gameState.combat.startCombat();
         }
     }
@@ -257,6 +267,8 @@ function promptLootConfirmation() {
             updateLog('Loot skipped.');
             document.removeEventListener('keydown', lootListener);
         }
+        combatVisible = false;
+        draw();
     }, { once: true });
 }
 
@@ -279,7 +291,9 @@ function checkEncounters() {
     if (enemy && !gameState.combat) {
         gameState.combat = new Combat([player], [enemy]);
         const combatState = gameState.combat.startCombat();
-        updateLog('Combat initiated! Use 1:Attack, 2:Inventory, 3:Move, 4:Evade, 5:Flee');
+        combatVisible = true;
+        updateLog('Combat initiated! Use 1:Attack, 2:Inventory, 4:Evade, 5:Flee');
+        draw();
     }
 }
 
@@ -329,23 +343,10 @@ function restartGame() {
         enemies: [{ x: 5, y: 5, map: 'prison', name: 'Escaped Prisoner', health: 50, attack: 5 }],
         combat: null
     };
+    combatVisible = false;
     draw();
     updateLog('Game restarted!');
 }
-
-document.addEventListener('keydown', (event) => {
-    if (gameState.combat && gameState.combat.isActive) {
-        if (event.key === 'r' && gameState.player.health <= 0) restartGame();
-        else if (event.key === 'l' && gameState.player.health <= 0) loadGame();
-        else handleCombatInput(event);
-    } else if (inventoryVisible) {
-        handleInventoryInput(event);
-    } else {
-        handleMapInput(event);
-        if (event.key === 'r') restartGame();
-        else if (event.key === 'l') loadGame();
-    }
-});
 
 function updateLog(message = '') {
     const log = document.getElementById('game-log');
