@@ -59,6 +59,7 @@ let gameState = {
 
 let inventoryVisible = false;
 let selectedItemIndex = 0;
+let awaitingEquipConfirmation = false;
 
 function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -137,13 +138,34 @@ function handleInventoryInput(event) {
             updateInventory();
             break;
         case 'Enter':
-            if (player.inventory.length > 0) {
-                confirmEquip(selectedItemIndex);
+            if (player.inventory.length > 0 && !awaitingEquipConfirmation) {
+                awaitingEquipConfirmation = true;
+                updateInventory(`Equip ${player.inventory[selectedItemIndex].name}? (y/n)`);
+            }
+            break;
+        case 'y':
+            if (awaitingEquipConfirmation && player.inventory.length > 0) {
+                equipItem(player.inventory[selectedItemIndex]);
+                awaitingEquipConfirmation = false;
+                updateInventory();
+            }
+            break;
+        case 'n':
+            if (awaitingEquipConfirmation) {
+                awaitingEquipConfirmation = false;
+                updateInventory();
+            }
+            break;
+        case 'u':
+            const equippedWeapon = player.equipped.weapon ? 'weapon' : player.equipped.armor ? 'armor' : null;
+            if (equippedWeapon) {
+                unequipItem(equippedWeapon);
             }
             break;
         case 'i':
         case 'Escape':
             toggleInventory();
+            awaitingEquipConfirmation = false;
             break;
     }
 }
@@ -207,9 +229,13 @@ function loadGame() {
 function updateLog(message = '') {
     const log = document.getElementById('game-log');
     if (message) {
-        log.textContent = message;
+        const lines = log.textContent.split('\n');
+        lines.unshift(message); // Add new message at the top
+        lines.unshift(''); // Add blank line
+        if (lines.length > 10) lines.length = 10; // Limit to 10 lines (5 messages with separators)
+        log.textContent = lines.join('\n');
     } else {
-        log.textContent = `Player at (${player.x}, ${player.y})\n${log.textContent.split('\n').slice(0, 4).join('\n')}`;
+        log.textContent = `Player at (${player.x}, ${player.y})\n${log.textContent.split('\n').slice(0, 9).join('\n')}`;
     }
 }
 
@@ -218,6 +244,7 @@ function toggleInventory() {
     const inv = document.getElementById('inventory');
     inventoryVisible = !inventoryVisible;
     selectedItemIndex = 0; // Reset selection
+    awaitingEquipConfirmation = false;
     if (inventoryVisible) {
         log.style.display = 'none';
         inv.style.display = 'block';
@@ -229,28 +256,21 @@ function toggleInventory() {
     }
 }
 
-function updateInventory() {
+function updateInventory(message = '') {
     const inv = document.getElementById('inventory');
     let content = 'ITEM\n';
     player.inventory.forEach((item, index) => {
         const equipped = player.equipped.weapon === item ? ' (weapon)' : 
                         player.equipped.armor === item ? ' (armor)' : '';
         const prefix = index === selectedItemIndex ? '>' : ' ';
-        content += `${prefix} ${index + 1}> ${item.name}${equipped}\n`;
+        content += `${prefix} ${index + 1}> ${item.name}${equipped}\n`; // Ensure each item on new line
     });
     content += '\nNAME     AC  AMM  MAX  CON  WEAPON\n';
-    content += '1> You    0   0    100  10   ';
-    content += player.equipped.weapon ? player.equipped.weapon.name : 'None';
-    inv.textContent = content;
-}
-
-function confirmEquip(index) {
-    const item = player.inventory[index];
-    const response = prompt(`Equip ${item.name} as ${item.type === 'armor' ? 'armor' : 'weapon'}? (y/n)`);
-    if (response && response.toLowerCase() === 'y') {
-        equipItem(item);
+    content += `1> You    0   0    100  10   ${player.equipped.weapon ? player.equipped.weapon.name : 'None'}\n`;
+    if (awaitingEquipConfirmation) {
+        content += `\nEquip ${player.inventory[selectedItemIndex].name}? (y/n)`;
     }
-    updateInventory();
+    inv.textContent = content;
 }
 
 function equipItem(item) {
@@ -275,15 +295,5 @@ function unequipItem(type) {
         updateInventory('Nothing to unequip.');
     }
 }
-
-// Add unequip functionality via a key (e.g., 'u')
-document.addEventListener('keydown', (event) => {
-    if (inventoryVisible && event.key === 'u') {
-        const equippedWeapon = player.equipped.weapon ? 'weapon' : player.equipped.armor ? 'armor' : null;
-        if (equippedWeapon) {
-            unequipItem(equippedWeapon);
-        }
-    }
-});
 
 draw();
