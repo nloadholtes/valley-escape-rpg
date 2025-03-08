@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Wasteland Clone</title>
+    <style>
+        canvas {
+            border: 1px solid black;
+        }
+        #game-ui {
+            width: 600px;
+            margin-top: 10px;
+            font-family: monospace;
+        }
+        button {
+            margin: 5px;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas" width="600" height="400"></canvas>
+    <div id="game-ui">
+        <p id="game-log">Welcome to the Wasteland Clone!</p>
+        <button onclick="saveGame()">Save Game</button>
+        <button onclick="loadGame()">Load Game</button>
+    </div>
+    <script src="game.js"></script>
+</body>
+</html>
