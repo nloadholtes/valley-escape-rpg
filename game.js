@@ -1,7 +1,7 @@
 // game.js
 const canvas = document.getElementById('gameMap');
 const ctx = canvas.getContext('2d');
-const tileSize = 40;
+const tileSize = 32;
 const mapWidth = 15;
 const mapHeight = 10;
 
@@ -42,9 +42,9 @@ let player = {
 };
 
 let items = [
-    { x: 3, y: 3, map: 'prison', name: 'Rusty Shank', type: 'weapon', damage: 15 },
-    { x: 7, y: 5, map: 'prison', name: 'Guard Uniform', type: 'armor', defense: 20 },
-    { x: 2, y: 2, map: 'village1', name: 'Rock', type: 'other', damage: 0.1 }
+    { x: 3, y: 3, map: 'prison', name: 'Rusty Shank', type: 'weapon', damage: 15, image: null, default: '🔪' },
+    { x: 7, y: 5, map: 'prison', name: 'Guard Uniform', type: 'armor', defense: 20, image: null, default: '🧥' },
+    { x: 2, y: 2, map: 'village1', name: 'Rock', type: 'other', damage: 0.1, image: null, default: '🪨' }
 ];
 
 let gameState = {
@@ -67,29 +67,43 @@ function draw() {
 
     for (let y = 0; y < mapHeight; y++) {
         for (let x = 0; x < mapWidth; x++) {
-            if (currentMap[y][x] === 0) ctx.fillStyle = '#d2b48c';
-            else if (currentMap[y][x] === 1) ctx.fillStyle = '#555555';
-            else if (currentMap[y][x] === 2) ctx.fillStyle = '#00ff00';
+            ctx.fillStyle = '#000'; // Background for text
             ctx.fillRect(x * tileSize, y * tileSize, tileSize, tileSize);
+            const emoji = currentMap[y][x] === 1 ? '⬛' : // Wall
+                         currentMap[y][x] === 0 ? '🟫' : // Ground
+                         currentMap[y][x] === 2 ? '🟩' : ''; // Exit
+            ctx.font = '24px monospace';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillStyle = '#0f0'; // Green text to match Wasteland UI
+            ctx.fillText(emoji, x * tileSize + tileSize / 2, y * tileSize + tileSize / 2);
         }
     }
 
     gameState.items.forEach(item => {
         if (item.map === gameState.currentMap) {
-            ctx.fillStyle = '#ffff00';
+            ctx.fillStyle = '#000';
             ctx.fillRect(item.x * tileSize, item.y * tileSize, tileSize, tileSize);
+            ctx.fillStyle = '#0f0';
+            // Use the 'default' emoji if no image is provided
+            const display = item.image ? item.image : item.default;
+            ctx.fillText(display, item.x * tileSize + tileSize / 2, item.y * tileSize + tileSize / 2);
         }
     });
 
     gameState.enemies.forEach(enemy => {
         if (enemy.map === gameState.currentMap) {
-            ctx.fillStyle = '#ff00ff';
+            ctx.fillStyle = '#000';
             ctx.fillRect(enemy.x * tileSize, enemy.y * tileSize, tileSize, tileSize);
+            ctx.fillStyle = '#0f0';
+            ctx.fillText('🟪', enemy.x * tileSize + tileSize / 2, enemy.y * tileSize + tileSize / 2);
         }
     });
 
-    ctx.fillStyle = '#ff0000';
+    ctx.fillStyle = '#000';
     ctx.fillRect(player.x * tileSize, player.y * tileSize, tileSize, tileSize);
+    ctx.fillStyle = '#0f0';
+    ctx.fillText('🟥', player.x * tileSize + tileSize / 2, player.y * tileSize + tileSize / 2);
 }
 
 document.addEventListener('keydown', (event) => {
@@ -175,9 +189,10 @@ function checkItems() {
         i.x === player.x && i.y === player.y && i.map === gameState.currentMap
     );
     if (itemIndex !== -1) {
-        player.inventory.push(gameState.items[itemIndex]);
+        const pickedItem = gameState.items[itemIndex];
+        player.inventory.push(pickedItem);
         gameState.items.splice(itemIndex, 1);
-        updateLog(`Picked up ${gameState.items[itemIndex].name}`);
+        updateLog(`Picked up ${pickedItem.name} (${pickedItem.default})`);
     }
 }
 
@@ -230,9 +245,9 @@ function updateLog(message = '') {
     const log = document.getElementById('game-log');
     if (message) {
         const lines = log.textContent.split('\n');
-        lines.unshift(message); // Add new message at the top
-        lines.unshift(''); // Add blank line
-        if (lines.length > 10) lines.length = 10; // Limit to 10 lines (5 messages with separators)
+        lines.unshift(message);
+        lines.unshift('');
+        if (lines.length > 10) lines.length = 10;
         log.textContent = lines.join('\n');
     } else {
         log.textContent = `Player at (${player.x}, ${player.y})\n${log.textContent.split('\n').slice(0, 9).join('\n')}`;
@@ -243,7 +258,7 @@ function toggleInventory() {
     const log = document.getElementById('game-log');
     const inv = document.getElementById('inventory');
     inventoryVisible = !inventoryVisible;
-    selectedItemIndex = 0; // Reset selection
+    selectedItemIndex = 0;
     awaitingEquipConfirmation = false;
     if (inventoryVisible) {
         log.style.display = 'none';
@@ -263,7 +278,7 @@ function updateInventory(message = '') {
         const equipped = player.equipped.weapon === item ? ' (weapon)' : 
                         player.equipped.armor === item ? ' (armor)' : '';
         const prefix = index === selectedItemIndex ? '>' : ' ';
-        content += `${prefix} ${index + 1}> ${item.name}${equipped}\n`; // Ensure each item on new line
+        content += `${prefix} ${index + 1}> ${item.default} ${item.name}${equipped}\n`; // Show emoji in inventory
     });
     content += '\nNAME     AC  AMM  MAX  CON  WEAPON\n';
     content += `1> You    0   0    100  10   ${player.equipped.weapon ? player.equipped.weapon.name : 'None'}\n`;
