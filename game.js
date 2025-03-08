@@ -1,4 +1,6 @@
 // game.js
+import { Combat } from './combat.js';
+
 const canvas = document.getElementById('gameMap');
 const ctx = canvas.getContext('2d');
 const tileSize = 32;
@@ -37,6 +39,7 @@ let player = {
     y: 1,
     health: 100,
     attack: 10,
+    name: 'You',
     inventory: [],
     equipped: { weapon: null, armor: null }
 };
@@ -54,7 +57,8 @@ let gameState = {
     items: items,
     enemies: [
         { x: 5, y: 5, map: 'prison', name: 'Escaped Prisoner', health: 50, attack: 5 }
-    ]
+    ],
+    combat: null // Will hold the Combat instance
 };
 
 let inventoryVisible = false;
@@ -67,15 +71,15 @@ function draw() {
 
     for (let y = 0; y < mapHeight; y++) {
         for (let x = 0; x < mapWidth; x++) {
-            ctx.fillStyle = '#000'; // Background for text
+            ctx.fillStyle = '#000';
             ctx.fillRect(x * tileSize, y * tileSize, tileSize, tileSize);
-            const emoji = currentMap[y][x] === 1 ? '⬛' : // Wall
-                         currentMap[y][x] === 0 ? '🟫' : // Ground
-                         currentMap[y][x] === 2 ? '🟩' : ''; // Exit
+            const emoji = currentMap[y][x] === 1 ? '⬛' :
+                         currentMap[y][x] === 0 ? '🟫' :
+                         currentMap[y][x] === 2 ? '🟩' : '';
             ctx.font = '24px monospace';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
-            ctx.fillStyle = '#0f0'; // Green text to match Wasteland UI
+            ctx.fillStyle = '#0f0';
             ctx.fillText(emoji, x * tileSize + tileSize / 2, y * tileSize + tileSize / 2);
         }
     }
@@ -85,7 +89,6 @@ function draw() {
             ctx.fillStyle = '#000';
             ctx.fillRect(item.x * tileSize, item.y * tileSize, tileSize, tileSize);
             ctx.fillStyle = '#0f0';
-            // Use the 'default' emoji if no image is provided
             const display = item.image ? item.image : item.default;
             ctx.fillText(display, item.x * tileSize + tileSize / 2, item.y * tileSize + tileSize / 2);
         }
@@ -107,7 +110,9 @@ function draw() {
 }
 
 document.addEventListener('keydown', (event) => {
-    if (inventoryVisible) {
+    if (gameState.combat && gameState.combat.isActive) {
+        handleCombatInput(event);
+    } else if (inventoryVisible) {
         handleInventoryInput(event);
     } else {
         handleMapInput(event);
@@ -133,7 +138,6 @@ function handleMapInput(event) {
         player.y = newY;
         checkItems();
         checkEncounters();
-        checkStoryTriggers();
     } else if (tile === 2) {
         switchMap();
     }
@@ -184,6 +188,78 @@ function handleInventoryInput(event) {
     }
 }
 
+function handleCombatInput(event) {
+    if (!gameState.combat) return;
+
+    const combatState = gameState.combat.getCombatState();
+    const currentActor = combatState.currentActor;
+    let actionResult;
+
+    switch (event.key) {
+        case '1': // Attack
+            actionResult = gameState.combat.performAction('attack', gameState.combat.enemies[0]);
+            break;
+        case '2': // Access Inventory
+            actionResult = gameState.combat.performAction('inventory');
+            toggleInventory(); // Show inventory for weapon selection
+            return; // Exit to let inventory handle the rest
+        case '3': // Move
+            actionResult = gameState.combat.performAction('move');
+            break;
+        case '4': // Evade
+            actionResult = gameState.combat.performAction('evade');
+            break;
+        case '5': // Flee
+            actionResult = gameState.combat.performAction('flee');
+            break;
+        case 'y': // Confirm attack after inventory (if in queue)
+            if (gameState.combat.actionQueue.includes('inventory')) {
+                actionResult = gameState.combat.performAction('attackAfterInventory', gameState.combat.enemies[0]);
+            }
+            break;
+        case 'n': // Cancel inventory action
+            if (gameState.combat.actionQueue.includes('inventory')) {
+                gameState.combat.actionQueue = [];
+                actionResult = { result: 'Inventory action canceled.', state: gameState.combat.getCombatState() };
+            }
+            break;
+        case 'Escape':
+            gameState.combat.endCombat();
+            updateLog('Combat manually ended for testing.');
+            return;
+    }
+
+    if (actionResult) {
+        updateLog(actionResult.result);
+        if (actionResult.victory) {
+            if (actionResult.victory === 'player' && actionResult.loot) {
+                const lootMessage = gameState.combat.loot();
+                updateLog(lootMessage);
+                promptLootConfirmation();
+            } else if (actionResult.defeat) {
+                updateLog('Game Over! Press r to restart or l to load a saved game.');
+            }
+        } else if (actionResult.state) {
+            gameState.combat = new Combat([player], gameState.enemies); // Refresh combat state
+            gameState.combat.startCombat();
+        }
+    }
+}
+
+function promptLootConfirmation() {
+    updateLog('Press y to loot, n to skip.');
+    document.addEventListener('keydown', function lootListener(event) {
+        if (event.key === 'y') {
+            const lootMessage = gameState.combat.loot();
+            updateLog(lootMessage);
+            document.removeEventListener('keydown', lootListener);
+        } else if (event.key === 'n') {
+            updateLog('Loot skipped.');
+            document.removeEventListener('keydown', lootListener);
+        }
+    }, { once: true });
+}
+
 function checkItems() {
     const itemIndex = gameState.items.findIndex(i => 
         i.x === player.x && i.y === player.y && i.map === gameState.currentMap
@@ -200,8 +276,10 @@ function checkEncounters() {
     const enemy = gameState.enemies.find(e => 
         e.x === player.x && e.y === player.y && e.map === gameState.currentMap
     );
-    if (enemy) {
-        updateLog(`You encounter ${enemy.name}! (Health: ${enemy.health})`);
+    if (enemy && !gameState.combat) {
+        gameState.combat = new Combat([player], [enemy]);
+        const combatState = gameState.combat.startCombat();
+        updateLog('Combat initiated! Use 1:Attack, 2:Inventory, 3:Move, 4:Evade, 5:Flee');
     }
 }
 
@@ -241,6 +319,34 @@ function loadGame() {
     }
 }
 
+function restartGame() {
+    player = { x: 1, y: 1, health: 100, attack: 10, name: 'You', inventory: [], equipped: { weapon: null, armor: null } };
+    gameState = {
+        player: player,
+        currentMap: 'prison',
+        maps: maps,
+        items: items,
+        enemies: [{ x: 5, y: 5, map: 'prison', name: 'Escaped Prisoner', health: 50, attack: 5 }],
+        combat: null
+    };
+    draw();
+    updateLog('Game restarted!');
+}
+
+document.addEventListener('keydown', (event) => {
+    if (gameState.combat && gameState.combat.isActive) {
+        if (event.key === 'r' && gameState.player.health <= 0) restartGame();
+        else if (event.key === 'l' && gameState.player.health <= 0) loadGame();
+        else handleCombatInput(event);
+    } else if (inventoryVisible) {
+        handleInventoryInput(event);
+    } else {
+        handleMapInput(event);
+        if (event.key === 'r') restartGame();
+        else if (event.key === 'l') loadGame();
+    }
+});
+
 function updateLog(message = '') {
     const log = document.getElementById('game-log');
     if (message) {
@@ -278,7 +384,7 @@ function updateInventory(message = '') {
         const equipped = player.equipped.weapon === item ? ' (weapon)' : 
                         player.equipped.armor === item ? ' (armor)' : '';
         const prefix = index === selectedItemIndex ? '>' : ' ';
-        content += `${prefix} ${index + 1}> ${item.default} ${item.name}${equipped}\n`; // Show emoji in inventory
+        content += `${prefix} ${index + 1}> ${item.default} ${item.name}${equipped}\n`;
     });
     content += '\nNAME     AC  AMM  MAX  CON  WEAPON\n';
     content += `1> You    0   0    100  10   ${player.equipped.weapon ? player.equipped.weapon.name : 'None'}\n`;
@@ -312,3 +418,4 @@ function unequipItem(type) {
 }
 
 draw();
+
