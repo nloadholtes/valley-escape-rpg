@@ -5,7 +5,7 @@ const tileSize = 40;
 const mapWidth = 15;
 const mapHeight = 10;
 
-// Multiple maps (0 = ground, 1 = wall, 2 = exit to next map)
+// Maps (0 = ground, 1 = wall, 2 = exit)
 const maps = {
     prison: [
         [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
@@ -30,8 +30,7 @@ const maps = {
         [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
         [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
         [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
-    ],
-    // Add more maps (e.g., village2, valleyExit) later
+    ]
 };
 
 // Player object
@@ -39,15 +38,24 @@ let player = {
     x: 1,
     y: 1,
     health: 100,
-    attack: 10,
-    inventory: []
+    attack: 10, // Base attack without weapon
+    inventory: [],
+    equipped: { weapon: null, armor: null }
 };
+
+// Items in the game world
+let items = [
+    { x: 3, y: 3, map: 'prison', name: 'Rusty Shank', type: 'weapon', damage: 15 },
+    { x: 7, y: 5, map: 'prison', name: 'Guard Uniform', type: 'armor', defense: 20 },
+    { x: 2, y: 2, map: 'village1', name: 'Rock', type: 'other', damage: 0.1 }
+];
 
 // Game state
 let gameState = {
     player: player,
     currentMap: 'prison',
     maps: maps,
+    items: items,
     enemies: [
         { x: 5, y: 5, map: 'prison', name: 'Escaped Prisoner', health: 50, attack: 5 }
     ]
@@ -71,6 +79,14 @@ function draw() {
             ctx.fillRect(x * tileSize, y * tileSize, tileSize, tileSize);
         }
     }
+
+    // Draw items
+    gameState.items.forEach(item => {
+        if (item.map === gameState.currentMap) {
+            ctx.fillStyle = '#ffff00'; // Yellow for items
+            ctx.fillRect(item.x * tileSize, item.y * tileSize, tileSize, tileSize);
+        }
+    });
 
     // Draw enemies
     gameState.enemies.forEach(enemy => {
@@ -96,22 +112,89 @@ document.addEventListener('keydown', (event) => {
         case 'ArrowDown': newY++; break;
         case 'ArrowLeft': newX--; break;
         case 'ArrowRight': newX++; break;
+        case 'i': showInventory(); return; // Press 'i' to view inventory
     }
 
-    // Check tile type
     const tile = currentMap[newY][newX];
     if (tile === 0) {
-        // Move if ground
         player.x = newX;
         player.y = newY;
         checkEncounters();
+        checkItems();
         checkStoryTriggers();
     } else if (tile === 2) {
-        // Switch maps if exit
         switchMap();
     }
     draw();
 });
+
+// Check for items
+function checkItems() {
+    const itemIndex = gameState.items.findIndex(i => 
+        i.x === player.x && i.y === player.y && i.map === gameState.currentMap
+    );
+    if (itemIndex !== -1) {
+        const item = gameState.items[itemIndex];
+        player.inventory.push(item);
+        gameState.items.splice(itemIndex, 1); // Remove from world
+        updateLog(`Picked up ${item.name}`);
+    }
+}
+
+// Show inventory and equipment options
+function showInventory() {
+    let message = 'Inventory:\n';
+    player.inventory.forEach((item, index) => {
+        const equipped = player.equipped.weapon === item || player.equipped.armor === item ? ' (equipped)' : '';
+        message += `${index + 1}. ${item.name}${equipped}\n`;
+    });
+    message += '\nCommands: "equip <number>" or "unequip <type>" (e.g., "equip 1" or "unequip weapon")';
+    updateLog(message);
+    promptCommand();
+}
+
+// Handle inventory commands
+function promptCommand() {
+    const command = prompt('Enter command:');
+    if (command) {
+        const [action, arg] = command.split(' ');
+        if (action === 'equip') {
+            const index = parseInt(arg) - 1;
+            if (index >= 0 && index < player.inventory.length) {
+                equipItem(player.inventory[index]);
+            }
+        } else if (action === 'unequip') {
+            unequipItem(arg);
+        }
+        draw();
+    }
+}
+
+// Equip an item
+function equipItem(item) {
+    if (item.type === 'armor') {
+        player.equipped.armor = item;
+        updateLog(`Equipped ${item.name} as armor (Defense: ${item.defense})`);
+    } else {
+        // Everything can be a weapon, default damage 0.1 if not specified
+        player.equipped.weapon = item;
+        const damage = item.damage || 0.1;
+        updateLog(`Equipped ${item.name} as weapon (Damage: ${damage})`);
+    }
+}
+
+// Unequip an item
+function unequipItem(type) {
+    if (type === 'weapon' && player.equipped.weapon) {
+        updateLog(`Unequipped ${player.equipped.weapon.name}`);
+        player.equipped.weapon = null;
+    } else if (type === 'armor' && player.equipped.armor) {
+        updateLog(`Unequipped ${player.equipped.armor.name}`);
+        player.equipped.armor = null;
+    } else {
+        updateLog('Nothing to unequip.');
+    }
+}
 
 // Check for enemy encounters
 function checkEncounters() {
@@ -120,7 +203,6 @@ function checkEncounters() {
     );
     if (enemy) {
         updateLog(`You encounter ${enemy.name}! (Health: ${enemy.health})`);
-        // Placeholder for combat later
     }
 }
 
@@ -141,7 +223,6 @@ function switchMap() {
         player.y = 1;
         updateLog('You leave the prison and enter the valley.');
     } else if (gameState.currentMap === 'village1') {
-        // Add more maps later
         updateLog('You’ve reached the end of this demo!');
     }
 }
@@ -172,3 +253,4 @@ function updateLog(message) {
 
 // Initial draw
 draw();
+
