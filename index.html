@@ -14,14 +14,22 @@
         #game-map {
             border: 1px solid #0f0;
         }
-        #game-log, #inventory {
+        #game-log, #inventory, #combat-options {
             height: 150px;
             overflow-y: auto;
             padding: 5px;
             border: 1px solid #0f0;
             white-space: pre-wrap;
         }
+        #game-log {
+            display: block; /* Show log by default for non-combat */
+        }
         #inventory {
+            height: 200px;
+            display: none;
+        }
+        #combat-options {
+            height: 50px;
             display: none;
         }
         #buttons {
@@ -41,6 +49,7 @@
         <canvas id="gameMap" width="600" height="400"></canvas>
         <div id="game-log"></div>
         <div id="inventory"></div>
+        <div id="combat-options"></div>
         <div id="buttons">
             <button onclick="saveGame()">Save Game</button>
             <button onclick="loadGame()">Load Game</button>

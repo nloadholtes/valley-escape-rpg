@@ -67,8 +67,8 @@ let awaitingEquipConfirmation = false;
 let combatVisible = false;
 
 function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
     if (!combatVisible) {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
         const currentMap = maps[gameState.currentMap];
 
         for (let y = 0; y < mapHeight; y++) {
@@ -109,8 +109,6 @@ function draw() {
         ctx.fillRect(player.x * tileSize, player.y * tileSize, tileSize, tileSize);
         ctx.fillStyle = '#0f0';
         ctx.fillText('🟥', player.x * tileSize + tileSize / 2, player.y * tileSize + tileSize / 2);
-    } else {
-        ctx.clearRect(0, 0, canvas.width, canvas.height); // Clear map during combat
     }
 }
 
@@ -141,14 +139,16 @@ function handleMapInput(event) {
         case 'i': toggleInventory(); return;
     }
 
-    const tile = currentMap[newY] && currentMap[newY][newX];
-    if (tile === 0) {
-        player.x = newX;
-        player.y = newY;
-        checkItems();
-        checkEncounters();
-    } else if (tile === 2) {
-        switchMap();
+    if (newY >= 0 && newY < mapHeight && newX >= 0 && newX < mapWidth) {
+        const tile = currentMap[newY][newX];
+        if (tile === 0) {
+            player.x = newX;
+            player.y = newY;
+            checkItems();
+            checkEncounters();
+        } else if (tile === 2) {
+            switchMap();
+        }
     }
     draw();
     updateLog();
@@ -210,20 +210,20 @@ function handleCombatInput(event) {
             break;
         case '2': // Access Inventory
             actionResult = gameState.combat.performAction('inventory');
-            toggleInventory(); // Show inventory for weapon selection
-            return; // Exit to let inventory handle the rest
+            toggleInventory();
+            return;
         case '4': // Evade
             actionResult = gameState.combat.performAction('evade');
             break;
         case '5': // Flee
             actionResult = gameState.combat.performAction('flee');
             break;
-        case 'y': // Confirm attack after inventory (if in queue)
+        case 'y':
             if (gameState.combat.actionQueue.includes('inventory')) {
                 actionResult = gameState.combat.performAction('attackAfterInventory', gameState.combat.enemies[0]);
             }
             break;
-        case 'n': // Cancel inventory action
+        case 'n':
             if (gameState.combat.actionQueue.includes('inventory')) {
                 gameState.combat.actionQueue = [];
                 actionResult = { result: 'Inventory action canceled.', state: gameState.combat.getCombatState() };
@@ -233,6 +233,7 @@ function handleCombatInput(event) {
             gameState.combat.endCombat();
             combatVisible = false;
             updateLog('Combat manually ended for testing.');
+            toggleCombatUI(false);
             draw();
             return;
     }
@@ -248,10 +249,12 @@ function handleCombatInput(event) {
                 updateLog('Game Over! Press r to restart or l to load a saved game.');
             }
             combatVisible = false;
+            toggleCombatUI(false);
             draw();
         } else if (actionResult.state) {
             gameState.combat = new Combat([player], gameState.enemies);
             gameState.combat.startCombat();
+            updateCombatUI();
         }
     }
 }
@@ -268,6 +271,7 @@ function promptLootConfirmation() {
             document.removeEventListener('keydown', lootListener);
         }
         combatVisible = false;
+        toggleCombatUI(false);
         draw();
     }, { once: true });
 }
@@ -292,7 +296,9 @@ function checkEncounters() {
         gameState.combat = new Combat([player], [enemy]);
         const combatState = gameState.combat.startCombat();
         combatVisible = true;
-        updateLog('Combat initiated! Use 1:Attack, 2:Inventory, 4:Evade, 5:Flee');
+        toggleCombatUI(true);
+        updateLog('Combat initiated!');
+        updateCombatUI();
         draw();
     }
 }
@@ -344,6 +350,7 @@ function restartGame() {
         combat: null
     };
     combatVisible = false;
+    toggleCombatUI(false);
     draw();
     updateLog('Game restarted!');
 }
@@ -353,11 +360,10 @@ function updateLog(message = '') {
     if (message) {
         const lines = log.textContent.split('\n');
         lines.unshift(message);
-        lines.unshift('');
         if (lines.length > 10) lines.length = 10;
         log.textContent = lines.join('\n');
-    } else {
-        log.textContent = `Player at (${player.x}, ${player.y})\n${log.textContent.split('\n').slice(0, 9).join('\n')}`;
+    } else if (!combatVisible) {
+        log.textContent = `Player at (${player.x}, ${player.y})`;
     }
 }
 
@@ -374,7 +380,11 @@ function toggleInventory() {
     } else {
         log.style.display = 'block';
         inv.style.display = 'none';
-        updateLog();
+        if (combatVisible) {
+            updateCombatUI();
+        } else {
+            updateLog();
+        }
     }
 }
 
@@ -418,5 +428,33 @@ function unequipItem(type) {
     }
 }
 
-draw();
+function toggleCombatUI(show) {
+    const log = document.getElementById('game-log');
+    const inv = document.getElementById('inventory');
+    const options = document.getElementById('combat-options');
+    if (show) {
+        log.style.display = 'block';
+        inv.style.display = 'block';
+        options.style.display = 'block';
+        options.textContent = '1:ATTACK  2:INVENTORY  4:EVADE  5:FLEE';
+    } else {
+        log.style.display = 'block'; // Show log for non-combat messages
+        inv.style.display = 'none';
+        options.style.display = 'none';
+        options.textContent = '';
+    }
+}
 
+function updateCombatUI() {
+    const inv = document.getElementById('inventory');
+    let content = 'ENEMY\n';
+    gameState.enemies.forEach((enemy, index) => {
+        content += `${index + 1}> ${enemy.name}  HP ${enemy.health.toFixed(1)}\n`;
+    });
+    content += '\nNAME     HP  WEAPON          ARMOR\n';
+    content += `1> You    ${player.health.toFixed(1)}  ${player.equipped.weapon ? player.equipped.weapon.name : 'None'}  ${player.equipped.armor ? player.equipped.armor.name : 'None'}\n`;
+    inv.textContent = content;
+}
+
+draw();
+updateLog(); // Initialize log on startup
