@@ -94,7 +94,7 @@ class Combat {
 
             switch (action) {
                 case 'attack':
-                    const damage = actor.equipped.weapon ? 
+                    const damage = (actor.equipped && actor.equipped.weapon) ? 
                         actor.equipped.weapon.damage : 
                         actor.strength / 2;
                     if (target) {
@@ -125,7 +125,7 @@ class Combat {
                     }
                     break;
                 case 'attackAfterInventory':
-                    if (this.actionQueue.includes('inventory') && actor.equipped.weapon && target) {
+                    if (this.actionQueue.includes('inventory') && actor.equipped && actor.equipped.weapon && target) {
                         const damage = actor.equipped.weapon.damage;
                         target.health -= damage * (Math.random() * 0.5 + 0.75);
                         result = `${actor.name} attacks ${target.name} for ${damage.toFixed(1)} damage with new weapon! ${target.name} has ${target.health.toFixed(1)} health left.`;
@@ -159,12 +159,12 @@ class Combat {
     loot() {
         if (this.enemies.some(e => e.health <= 0)) {
             const loot = this.enemies.filter(e => e.health <= 0).map(e => ({
-                name: `Looted ${e.name}'s ${e.equipped ? e.equipped.name : 'nothing'}`,
-                type: e.equipped ? e.equipped.type : 'other',
-                damage: e.equipped ? e.equipped.damage : 0,
-                defense: e.equipped ? e.equipped.defense : 0,
+                name: `Looted ${e.name}'s ${e.equipped && e.equipped.weapon ? e.equipped.weapon.name : 'nothing'}`,
+                type: e.equipped && e.equipped.weapon ? e.equipped.weapon.type : 'other',
+                damage: e.equipped && e.equipped.weapon ? e.equipped.weapon.damage : 0,
+                defense: e.equipped && e.equipped.armor ? e.equipped.armor.defense : 0,
                 image: null,
-                default: e.equipped ? e.equipped.default : '🕳️'
+                default: e.equipped && e.equipped.weapon ? e.equipped.weapon.default : '🕳️'
             }));
             this.playerParty[0].inventory.push(...loot);
             return `Looted: ${loot.map(l => l.name).join(', ')}`;
@@ -174,4 +174,5 @@ class Combat {
 }
 
 export { Combat };
+
 

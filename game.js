@@ -72,7 +72,7 @@ let gameState = {
     maps: maps,
     items: items,
     enemies: [
-        { x: 5, y: 5, map: 'prison', name: 'Escaped Prisoner', health: 50, attack: 5, strength: 12, luck: 5, agility: 10 }
+        { x: 5, y: 5, map: 'prison', name: 'Escaped Prisoner', health: 50, attack: 5, strength: 12, luck: 5, agility: 10, equipped: { weapon: null, armor: null } }
     ],
     combat: null
 };
@@ -229,7 +229,7 @@ function handleCombatInput(event) {
 
     // Skip player input if it's the enemy's turn
     if (combatState.currentActor === gameState.enemies[0]) {
-        const enemyAction = gameState.combat.selectEnemyAction(combatState.currentActor, gameState.playerParty.length);
+        const enemyAction = gameState.combat.selectEnemyAction(combatState.currentActor, gameState.combat.playerParty.length);
         updateLog(enemyAction.result);
         updateCombatUI();
         const finalState = gameState.combat.advanceTurn();
@@ -246,6 +246,7 @@ function handleCombatInput(event) {
                     updateLog('Combat ended due to escape.');
                 }
                 combatVisible = false;
+                gameState.combat = null;
                 toggleCombatUI(false);
                 draw();
             }
@@ -281,6 +282,7 @@ function handleCombatInput(event) {
         case 'Escape':
             gameState.combat.endCombat();
             combatVisible = false;
+            gameState.combat = null;
             updateLog('Combat manually ended for testing.');
             toggleCombatUI(false);
             draw();
@@ -296,7 +298,7 @@ function handleCombatInput(event) {
                 updateLog(nextState.result);
             }
             if (nextState.currentActor === gameState.enemies[0]) {
-                const enemyAction = gameState.combat.selectEnemyAction(nextState.currentActor, gameState.playerParty.length);
+                const enemyAction = gameState.combat.selectEnemyAction(nextState.currentActor, gameState.combat.playerParty.length);
                 updateLog(enemyAction.result);
                 updateCombatUI();
                 const finalState = gameState.combat.advanceTurn();
@@ -313,6 +315,7 @@ function handleCombatInput(event) {
                             updateLog('Combat ended due to escape.');
                         }
                         combatVisible = false;
+                        gameState.combat = null;
                         toggleCombatUI(false);
                         draw();
                     }
@@ -334,6 +337,7 @@ function promptLootConfirmation() {
             document.removeEventListener('keydown', lootListener);
         }
         combatVisible = false;
+        gameState.combat = null;
         toggleCombatUI(false);
         draw();
     }, { once: true });
@@ -412,7 +416,7 @@ function restartGame() {
         currentMap: 'prison',
         maps: maps,
         items: items,
-        enemies: [{ x: 5, y: 5, map: 'prison', name: 'Escaped Prisoner', health: 50, attack: 5, strength: 12, luck: 5, agility: 10 }],
+        enemies: [{ x: 5, y: 5, map: 'prison', name: 'Escaped Prisoner', health: 50, attack: 5, strength: 12, luck: 5, agility: 10, equipped: { weapon: null, armor: null } }],
         combat: null
     };
     combatVisible = false;
@@ -527,3 +531,4 @@ function updateCombatUI() {
 
 draw();
 updateLog();
+
