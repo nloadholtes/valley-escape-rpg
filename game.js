@@ -41,7 +41,23 @@ let player = {
     attack: 10,
     name: 'You',
     inventory: [],
-    equipped: { weapon: null, armor: null }
+    equipped: { weapon: null, armor: null },
+    strength: 15,
+    luck: 12,
+    agility: 14
+};
+
+let ally = {
+    x: 1,
+    y: 1,
+    health: 80,
+    attack: 8,
+    name: 'Ally',
+    inventory: [],
+    equipped: { weapon: null, armor: null },
+    strength: 10,
+    luck: 8,
+    agility: 16
 };
 
 let items = [
@@ -56,7 +72,7 @@ let gameState = {
     maps: maps,
     items: items,
     enemies: [
-        { x: 5, y: 5, map: 'prison', name: 'Escaped Prisoner', health: 50, attack: 5 }
+        { x: 5, y: 5, map: 'prison', name: 'Escaped Prisoner', health: 50, attack: 5, strength: 12, luck: 5, agility: 10 }
     ],
     combat: null
 };
@@ -67,7 +83,7 @@ let awaitingEquipConfirmation = false;
 let combatVisible = false;
 
 function draw() {
-    canvas.style.display = combatVisible ? 'none' : 'block'; // Hide canvas during combat
+    canvas.style.display = combatVisible ? 'none' : 'block';
     if (!combatVisible) {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         const currentMap = maps[gameState.currentMap];
@@ -110,15 +126,18 @@ function draw() {
         ctx.fillRect(player.x * tileSize, player.y * tileSize, tileSize, tileSize);
         ctx.fillStyle = '#0f0';
         ctx.fillText('🟥', player.x * tileSize + tileSize / 2, player.y * tileSize + tileSize / 2);
-    } else {
-        ctx.clearRect(0, 0, canvas.width, canvas.height); // Ensure canvas is cleared
+
+        ctx.fillStyle = '#000';
+        ctx.fillRect(ally.x * tileSize, ally.y * tileSize, tileSize, tileSize);
+        ctx.fillStyle = '#0f0';
+        ctx.fillText('🟦', ally.x * tileSize + tileSize / 2, ally.y * tileSize + tileSize / 2);
     }
 }
 
 document.addEventListener('keydown', (event) => {
-    if (gameState.combat && gameState.combat.isActive) {
-        if (event.key === 'r' && gameState.player.health <= 0) restartGame();
-        else if (event.key === 'l' && gameState.player.health <= 0) loadGame();
+    if (gameState.combat && gameState.combat.isActive && combatVisible) {
+        if (event.key === 'r' && gameState.player.health <= 0 && gameState.ally.health <= 0) restartGame();
+        else if (event.key === 'l' && gameState.player.health <= 0 && gameState.ally.health <= 0) loadGame();
         else handleCombatInput(event);
     } else if (inventoryVisible) {
         handleInventoryInput(event);
@@ -147,6 +166,8 @@ function handleMapInput(event) {
         if (tile === 0) {
             player.x = newX;
             player.y = newY;
+            ally.x = newX;
+            ally.y = newY;
             checkItems();
             checkEncounters();
         } else if (tile === 2) {
@@ -201,35 +222,60 @@ function handleInventoryInput(event) {
 }
 
 function handleCombatInput(event) {
-    if (!gameState.combat) return;
+    if (!gameState.combat || !gameState.combat.isActive || !combatVisible) return;
 
     const combatState = gameState.combat.getCombatState();
-    const currentActor = combatState.currentActor;
     let actionResult;
+
+    // Skip player input if it's the enemy's turn
+    if (combatState.currentActor === gameState.enemies[0]) {
+        const enemyAction = gameState.combat.selectEnemyAction(combatState.currentActor, gameState.playerParty.length);
+        updateLog(enemyAction.result);
+        updateCombatUI();
+        const finalState = gameState.combat.advanceTurn();
+        if (finalState) {
+            if (finalState.result) {
+                updateLog(finalState.result);
+            }
+            if (finalState.victory || finalState.escape) {
+                if (finalState.victory === 'player' && finalState.loot) {
+                    promptLootConfirmation();
+                } else if (finalState.defeat) {
+                    updateLog('Game Over! Press r to restart or l to load a saved game.');
+                } else if (finalState.escape) {
+                    updateLog('Combat ended due to escape.');
+                }
+                combatVisible = false;
+                toggleCombatUI(false);
+                draw();
+            }
+        }
+        return;
+    }
 
     switch (event.key) {
         case '1': // Attack
-            actionResult = gameState.combat.performAction('attack', gameState.combat.enemies[0]);
+            actionResult = gameState.combat.selectAction(combatState.currentActor, 'attack');
             break;
         case '2': // Access Inventory
-            actionResult = gameState.combat.performAction('inventory');
+            actionResult = gameState.combat.selectAction(combatState.currentActor, 'inventory');
             toggleInventory();
             return;
         case '4': // Evade
-            actionResult = gameState.combat.performAction('evade');
+            actionResult = gameState.combat.selectAction(combatState.currentActor, 'evade');
             break;
         case '5': // Flee
-            actionResult = gameState.combat.performAction('flee');
+            actionResult = gameState.combat.selectAction(combatState.currentActor, 'flee');
             break;
         case 'y': // Confirm attack after inventory
             if (gameState.combat.actionQueue.includes('inventory')) {
-                actionResult = gameState.combat.performAction('attackAfterInventory', gameState.combat.enemies[0]);
+                actionResult = gameState.combat.selectAction(combatState.currentActor, 'attackAfterInventory');
             }
             break;
         case 'n': // Cancel inventory action
             if (gameState.combat.actionQueue.includes('inventory')) {
                 gameState.combat.actionQueue = [];
-                actionResult = { result: 'Inventory action canceled.', state: gameState.combat.getCombatState() };
+                actionResult = { result: 'Inventory action canceled.' };
             }
             break;
         case 'Escape':
@@ -243,21 +289,35 @@ function handleCombatInput(event) {
 
     if (actionResult) {
         updateLog(actionResult.result);
-        if (actionResult.victory) {
-            if (actionResult.victory === 'player' && actionResult.loot) {
-                const lootMessage = gameState.combat.loot();
-                updateLog(lootMessage);
-                promptLootConfirmation();
-            } else if (actionResult.defeat) {
-                updateLog('Game Over! Press r to restart or l to load a saved game.');
+        updateCombatUI();
+        const nextState = gameState.combat.advanceTurn();
+        if (nextState) {
+            if (nextState.result) {
+                updateLog(nextState.result);
             }
-            combatVisible = false;
-            toggleCombatUI(false);
-            draw();
-        } else if (actionResult.state) {
-            gameState.combat = new Combat([player], gameState.enemies);
-            gameState.combat.startCombat();
-            updateCombatUI();
+            if (nextState.currentActor === gameState.enemies[0]) {
+                const enemyAction = gameState.combat.selectEnemyAction(nextState.currentActor, gameState.playerParty.length);
+                updateLog(enemyAction.result);
+                updateCombatUI();
+                const finalState = gameState.combat.advanceTurn();
+                if (finalState) {
+                    if (finalState.result) {
+                        updateLog(finalState.result);
+                    }
+                    if (finalState.victory || finalState.escape) {
+                        if (finalState.victory === 'player' && finalState.loot) {
+                            promptLootConfirmation();
+                        } else if (finalState.defeat) {
+                            updateLog('Game Over! Press r to restart or l to load a saved game.');
+                        } else if (finalState.escape) {
+                            updateLog('Combat ended due to escape.');
+                        }
+                        combatVisible = false;
+                        toggleCombatUI(false);
+                        draw();
+                    }
+                }
+            }
         }
     }
 }
@@ -296,11 +356,11 @@ function checkEncounters() {
         e.x === player.x && e.y === player.y && e.map === gameState.currentMap
     );
     if (enemy && !gameState.combat) {
-        gameState.combat = new Combat([player], [enemy]);
+        gameState.combat = new Combat([player, ally], [enemy]);
         const combatState = gameState.combat.startCombat();
         combatVisible = true;
         toggleCombatUI(true);
-        updateLog('Combat initiated!');
+        updateLog('Combat initiated! Select action for ' + combatState.currentActor.name);
         updateCombatUI();
         draw();
     }
@@ -319,6 +379,8 @@ function switchMap() {
         gameState.currentMap = 'village1';
         player.x = 1;
         player.y = 1;
+        ally.x = 1;
+        ally.y = 1;
         updateLog('You leave the prison and enter the valley.');
     } else if (gameState.currentMap === 'village1') {
         updateLog('You’ve reached the end of this demo!');
@@ -343,13 +405,14 @@ function loadGame() {
 }
 
 function restartGame() {
-    player = { x: 1, y: 1, health: 100, attack: 10, name: 'You', inventory: [], equipped: { weapon: null, armor: null } };
+    player = { x: 1, y: 1, health: 100, attack: 10, name: 'You', inventory: [], equipped: { weapon: null, armor: null }, strength: 15, luck: 12, agility: 14 };
+    ally = { x: 1, y: 1, health: 80, attack: 8, name: 'Ally', inventory: [], equipped: { weapon: null, armor: null }, strength: 10, luck: 8, agility: 16 };
     gameState = {
         player: player,
         currentMap: 'prison',
         maps: maps,
         items: items,
-        enemies: [{ x: 5, y: 5, map: 'prison', name: 'Escaped Prisoner', health: 50, attack: 5 }],
+        enemies: [{ x: 5, y: 5, map: 'prison', name: 'Escaped Prisoner', health: 50, attack: 5, strength: 12, luck: 5, agility: 10 }],
         combat: null
     };
     combatVisible = false;
@@ -436,14 +499,14 @@ function toggleCombatUI(show) {
     const inv = document.getElementById('inventory');
     const options = document.getElementById('combat-options');
     if (show) {
-        canvas.style.display = 'none'; // Hide canvas during combat
+        canvas.style.display = 'none';
         log.style.display = 'block';
         inv.style.display = 'block';
         options.style.display = 'block';
         options.textContent = '1:ATTACK  2:INVENTORY  4:EVADE  5:FLEE';
     } else {
-        canvas.style.display = 'block'; // Show canvas after combat
-        log.style.display = 'block'; // Keep log visible for non-combat
+        canvas.style.display = 'block';
+        log.style.display = 'block';
         inv.style.display = 'none';
         options.style.display = 'none';
         options.textContent = '';
@@ -454,13 +517,13 @@ function updateCombatUI() {
     const inv = document.getElementById('inventory');
     let content = 'ENEMY\n';
     gameState.enemies.forEach((enemy, index) => {
-        content += `${index + 1}> ${enemy.name}  HP ${enemy.health.toFixed(1)}\n`;
+        content += `${index + 1}> ${enemy.name}  HP ${enemy.health.toFixed(1)}  STR ${enemy.strength}  LCK ${enemy.luck}  AGI ${enemy.agility}\n`;
     });
-    content += '\nNAME     HP  WEAPON          ARMOR\n';
-    content += `1> You    ${player.health.toFixed(1)}  ${player.equipped.weapon ? player.equipped.weapon.name : 'None'}  ${player.equipped.armor ? player.equipped.armor.name : 'None'}\n`;
+    content += '\nNAME     HP  STR  LCK  AGI  WEAPON          ARMOR\n';
+    content += `1> You    ${player.health.toFixed(1)}  ${player.strength}  ${player.luck}  ${player.agility}  ${player.equipped.weapon ? player.equipped.weapon.name : 'None'}  ${player.equipped.armor ? player.equipped.armor.name : 'None'}\n`;
+    content += `2> Ally   ${ally.health.toFixed(1)}  ${ally.strength}  ${ally.luck}  ${ally.agility}  ${ally.equipped.weapon ? ally.equipped.weapon.name : 'None'}  ${ally.equipped.armor ? ally.equipped.armor.name : 'None'}\n`;
     inv.textContent = content;
 }
 
 draw();
-updateLog(); // Initialize log on startup
-
+updateLog();
