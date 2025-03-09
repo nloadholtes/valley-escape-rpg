@@ -244,11 +244,11 @@ function handleCombatInput(event) {
                     updateLog('Game Over! Press r to restart or l to load a saved game.');
                 } else if (finalState.escape) {
                     updateLog('Combat ended due to escape.');
+                    combatVisible = false;
+                    gameState.combat = null;
+                    toggleCombatUI(false);
+                    draw();
                 }
-                combatVisible = false;
-                gameState.combat = null;
-                toggleCombatUI(false);
-                draw();
             }
         }
         return;
@@ -313,11 +313,11 @@ function handleCombatInput(event) {
                             updateLog('Game Over! Press r to restart or l to load a saved game.');
                         } else if (finalState.escape) {
                             updateLog('Combat ended due to escape.');
+                            combatVisible = false;
+                            gameState.combat = null;
+                            toggleCombatUI(false);
+                            draw();
                         }
-                        combatVisible = false;
-                        gameState.combat = null;
-                        toggleCombatUI(false);
-                        draw();
                     }
                 }
             }
@@ -331,9 +331,13 @@ function promptLootConfirmation() {
         if (event.key === 'y') {
             const lootMessage = gameState.combat.loot();
             updateLog(lootMessage);
+            // Remove defeated enemies from gameState.enemies
+            gameState.enemies = gameState.enemies.filter(enemy => enemy.health > 0);
             document.removeEventListener('keydown', lootListener);
         } else if (event.key === 'n') {
             updateLog('Loot skipped.');
+            // Remove defeated enemies from gameState.enemies
+            gameState.enemies = gameState.enemies.filter(enemy => enemy.health > 0);
             document.removeEventListener('keydown', lootListener);
         }
         combatVisible = false;
@@ -531,4 +535,3 @@ function updateCombatUI() {
 
 draw();
 updateLog();
-
